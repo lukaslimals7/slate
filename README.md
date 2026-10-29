@@ -2,13 +2,11 @@
 
 **Notes and sketches, in one tab. No account, no server, no build step.**
 
-### → [lukaslimals7.github.io/Questlogs](https://lukaslimals7.github.io/Questlogs/)
-
 A clean, quiet place to write. If a note needs a diagram, the canvas is right there
 beside it — pen, pressure, eraser, undo. Everything lives in your browser's local
 storage, so it works offline and nothing leaves the device.
 
-![Slate](preview/light.png)
+![Slate — a coffee note beside a sketched mug](preview/coffee.png)
 
 ## What it does
 
