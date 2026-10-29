@@ -83,12 +83,6 @@ Notes never leave the browser. No analytics, no requests except the font files. 
 regularly: local storage is cleared when you clear site data, and it is per-browser and
 per-device.
 
-## History
-
-This started as **Questlogs**, an 8-bit habit tracker with HP, potions and permadeath.
-It was replaced by this notes app — the gamified version is no longer part of the
-history. The idea it kept: a tool that lives in a single URL and carries its own state.
-
 ---
 
 **Created with love by Lukas.**
