@@ -10,13 +10,20 @@ storage, so it works offline and nothing leaves the device.
 
 ## What it does
 
-- **Notes** — sidebar list, search, autosave, word count. Markdown-ish plain text,
-  set in Lora.
+- **Notes** — sidebar list, search, autosave, word count. Written in a quiet
+  contenteditable page set in Lora; the text is still stored as the same plain,
+  markdown-ish string.
 - **Sketch pane** — draw beside the note, or switch to a full canvas when you need room.
   Six inks, adjustable brush, pressure-sensitive with a pen or tablet, eraser, undo/redo.
+- **Paste a screenshot, anywhere** — `⌘V` with an image on the clipboard. In the note it
+  drops **right where the caret is**, in the flow of the text: click it to zoom, Backspace
+  next to it to remove it. In the canvas it lands under your ink, sized to fit, ready to trace
+  over — hide or remove it from the chip in the corner. Images are re-encoded smaller, they
+  persist with the note, and they never leave the device.
 - **Three layouts** — Write (text only), Split (both), Draw (canvas only). Remembered.
 - **Share by link** — the whole note, drawing included, is deflate-compressed into the
-  URL hash. Send it; it opens as a note on the other side. No server involved.
+  URL hash. Send it; it opens as a note on the other side. No server involved. Big images
+  won't fit in a URL — use Export all for those.
 - **Backup** — export everything as JSON, import it back. Also export a drawing as PNG.
 - **Light and dark** — follows your system, or pick one.
 - **Works offline** — it's one file. Save it, open it, done.
@@ -67,11 +74,23 @@ storage area — export your notes as JSON first, then import them on the new or
 ## How it's built
 
 One `index.html` — HTML, CSS, and vanilla JavaScript. No framework, no bundler, no
-dependencies, no fonts to install (Google Fonts, with system fallbacks). Total: ~35 KB.
+dependencies, no fonts to install (Google Fonts, with system fallbacks). Total: ~54 KB.
 
 **Strokes are stored as vectors, not pixels** — arrays of normalised points with pressure.
 That means a drawing stays sharp at any window size and re-renders perfectly after a
 resize, instead of blurring like a saved bitmap.
+
+**Pasted images are re-encoded before they're stored** — scaled down to at most 1600 px on
+the long edge and compressed to WebP in the browser, so a 4 MB screenshot lands at a
+fraction of that. They live in the note's own record as data URLs, which is why they survive
+a reload and travel with export/import. Canvas images keep normalised placement, so they
+stay put when the pane resizes.
+
+**The note pane is a light rich editor, not a `<textarea>`.** That is the price of an image
+sitting in the text instead of in a corner: a plain textarea can only hold characters. The
+document is one block per line, and every change is serialized straight back to the same
+markdown-ish body — an image becomes `![image](slateimg:<id>)` at its exact position. Nothing
+else in the format moved, so search, share links, export and older notes all still read it.
 
 **Sharing uses the browser's own compression.** `CompressionStream('deflate-raw')` packs
 the note into base64url; the receiver's browser decompresses it. No library, no server,
@@ -79,9 +98,11 @@ no database — a link *is* the note.
 
 ## Privacy
 
-Notes never leave the browser. No analytics, no requests except the font files. Export
-regularly: local storage is cleared when you clear site data, and it is per-browser and
-per-device.
+Notes never leave the browser. No analytics, no requests except the font files — a pasted
+screenshot is read and compressed in the page, never uploaded. Export regularly: local
+storage is cleared when you clear site data, and it is per-browser and per-device. Images
+share the same ~5 MB storage budget as your text, so a lot of screenshots will fill it
+faster than words do.
 
 ---
 

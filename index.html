@@ -88,7 +88,7 @@
   .ghost:hover{background:var(--hover); color:var(--ink)}
 
   /* ---------- main ---------- */
-  .main{display:grid; grid-template-rows:var(--top) 1fr var(--status); min-width:0; min-height:0}
+  .main{display:grid; grid-template-columns:minmax(0, 1fr); grid-template-rows:var(--top) 1fr var(--status); min-width:0; min-height:0}
   .topbar{display:flex; align-items:center; gap:10px; padding:0 14px 0 22px; border-bottom:1px solid var(--line); background:var(--panel)}
   .title{flex:1; min-width:0; border:0; background:transparent; outline:none; font-family:var(--serif); font-size:18px; font-weight:500; letter-spacing:-.01em; padding:6px 0}
   .title::placeholder{color:var(--faint)}
@@ -107,11 +107,17 @@
   .pane{min-width:0; min-height:0; position:relative; display:flex; flex-direction:column}
   .editor-pane{background:var(--panel); border-right:1px solid var(--line)}
   #body{
-    flex:1; width:100%; border:0; outline:none; resize:none; background:transparent;
+    flex:1; width:100%; border:0; outline:none; background:transparent; overflow-y:auto;
     font-family:var(--serif); font-size:16.5px; line-height:1.72; letter-spacing:.002em;
     padding:30px 34px 60px; color:var(--ink); min-height:0;
+    white-space:pre-wrap; overflow-wrap:break-word; word-break:break-word; caret-color:var(--ink);
   }
-  #body::placeholder{color:var(--faint)}
+  #body .ln{min-height:1.72em}
+  #body .note-img{display:inline-block; vertical-align:bottom; max-width:100%; max-height:62vh; margin:6px 2px; border-radius:8px; border:1px solid var(--line); background:var(--bg); cursor:zoom-in}
+  #body .note-img:focus, #body .note-img.selected{outline:2px solid var(--accent); outline-offset:2px}
+  .empty-hint{position:absolute; top:30px; left:34px; font-family:var(--serif); font-size:16.5px; line-height:1.72; color:var(--faint); pointer-events:none}
+  .empty-hint[hidden]{display:none}
+  .app[data-mode="write"] .empty-hint{top:38px; left:15%}
 
   .canvas-pane{background:var(--paper)}
   .canvas-wrap{flex:1; position:relative; min-height:0}
@@ -121,6 +127,8 @@
     background-image:radial-gradient(var(--line) 1px, transparent 1px);
     background-size:24px 24px; background-position:-1px -1px;
   }
+  /* the canvas takes focus on click so ⌘V can target it — never draw a ring for that */
+  #canvas:focus, #canvas:focus-visible{outline:none}
   .tools{display:flex; align-items:center; gap:8px; padding:7px 10px; border-bottom:1px solid var(--line); background:var(--panel); flex-wrap:wrap}
   .swatches{display:flex; gap:5px; align-items:center}
   .sw{width:17px; height:17px; border-radius:50%; border:2px solid transparent; box-shadow:inset 0 0 0 1px rgba(0,0,0,.12); transition:transform .1s}
@@ -129,6 +137,17 @@
   .tools input[type=range]{width:74px; accent-color:var(--ink); height:18px}
   .divider{width:1px; height:18px; background:var(--line); margin:0 2px}
   .canvas-hint{position:absolute; inset:auto 0 18px; text-align:center; color:var(--faint); font-size:12px; pointer-events:none; transition:opacity .4s}
+
+  /* ---------- pasted images ---------- */
+  .paste-chip{position:absolute; top:10px; left:10px; display:none; align-items:center; gap:6px; padding:4px 7px 4px 4px; border-radius:9px; background:var(--panel); border:1px solid var(--line); box-shadow:var(--shadow); font-size:11.5px; color:var(--muted); z-index:4; max-width:calc(100% - 20px)}
+  .paste-chip.on{display:flex}
+  .paste-chip img{width:26px; height:26px; border-radius:6px; object-fit:cover; display:block; cursor:zoom-in; flex:0 0 auto}
+  .paste-chip .nm{white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0}
+  .paste-chip button{width:22px; height:22px; display:grid; place-items:center; border-radius:6px; color:var(--muted); font-size:12px; line-height:1; flex:0 0 auto}
+  .paste-chip button:hover{background:var(--hover); color:var(--ink)}
+  .lightbox{position:fixed; inset:0; display:none; place-items:center; padding:5vh 5vw; background:rgba(20,19,16,.84); z-index:80}
+  .lightbox.show{display:grid}
+  .lightbox img{max-width:100%; max-height:90vh; border-radius:10px; box-shadow:0 24px 70px rgba(0,0,0,.5); background:var(--paper)}
 
   .status{display:flex; align-items:center; gap:8px; padding:0 16px; border-top:1px solid var(--line); background:var(--panel); font-size:11.5px; color:var(--muted); letter-spacing:.01em}
   .status .grow{flex:1}
@@ -168,6 +187,7 @@
     .app[data-mode="split"] .canvas-pane{display:none}
     .app[data-mode="split"] .editor-pane{border-right:0}
     .app[data-mode="write"] #body{padding:24px 20px 60px}
+    .app[data-mode="write"] .empty-hint{top:24px; left:20px}
     .status{padding:0 12px}
   }
   @media (prefers-reduced-motion: reduce){ *{transition:none !important} }
@@ -212,7 +232,8 @@
 
     <section class="workspace">
       <div class="pane editor-pane">
-        <textarea id="body" placeholder="Start writing…" spellcheck="true"></textarea>
+        <div id="body" contenteditable="true" spellcheck="true" role="textbox" aria-multiline="true" aria-label="Note"></div>
+        <div class="empty-hint" id="emptyHint">Start writing…</div>
       </div>
       <div class="pane canvas-pane">
         <div class="tools" id="tools">
@@ -227,8 +248,14 @@
           <button class="icon-btn" id="pngBtn" title="Save drawing as PNG">⤓</button>
         </div>
         <div class="canvas-wrap">
-          <canvas id="canvas"></canvas>
-          <div class="canvas-hint" id="hint">Draw with a mouse, finger, or pen</div>
+          <canvas id="canvas" tabindex="0"></canvas>
+          <div class="canvas-hint" id="hint">Draw with a mouse, finger, or pen · ⌘V pastes an image</div>
+          <div class="paste-chip" id="pasteChip">
+            <img id="chipThumb" alt="Pasted image">
+            <span class="nm" id="chipLabel">Pasted image</span>
+            <button type="button" id="chipEye" title="Hide pasted image" aria-label="Hide pasted image">◉</button>
+            <button type="button" id="chipX" title="Remove pasted image" aria-label="Remove pasted image">✕</button>
+          </div>
         </div>
       </div>
     </section>
@@ -243,6 +270,7 @@
   </main>
 </div>
 <div class="toast" id="toast"></div>
+<div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Image preview"><img id="lightboxImg" alt=""></div>
 <script>
 (() => {
 "use strict";
@@ -254,6 +282,8 @@ const notesEl = $("notes"), searchEl = $("search"), titleEl = $("title"), bodyEl
 const countsEl = $("counts"), savedEl = $("saved"), toastEl = $("toast");
 const cv = $("canvas"), ctx = cv.getContext("2d", { desynchronized: true });
 const hintEl = $("hint");
+const pasteChip = $("pasteChip"), emptyHint = $("emptyHint");
+const lightbox = $("lightbox"), lightboxImg = $("lightboxImg");
 
 const COLORS = ["#1b1a17", "#b3572f", "#2f6b57", "#2b5d8a", "#8a5a2b", "#d8b26a"];
 let color = COLORS[0], brush = 2.4, erasing = false;
@@ -265,7 +295,7 @@ let drawing = false, stroke = null, W = 0, H = 0, dpr = 1;
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 const now = () => Date.now();
-const blankNote = (extra = {}) => Object.assign({ id: uid(), title: "", body: "", strokes: [], created: now(), updated: now() }, extra);
+const blankNote = (extra = {}) => Object.assign({ id: uid(), title: "", body: "", strokes: [], images: [], pasted: [], created: now(), updated: now() }, extra);
 
 function load() {
   try {
@@ -280,6 +310,8 @@ function load() {
     title: typeof n.title === "string" ? n.title : "",
     body: typeof n.body === "string" ? n.body : "",
     strokes: Array.isArray(n.strokes) ? n.strokes : [],
+    images: cleanImages(n.images),
+    pasted: cleanPasted(n.pasted),
     created: n.created || now(),
     updated: n.updated || now()
   }));
@@ -293,8 +325,24 @@ function load() {
   activeId = notes[0].id;
 }
 
+/* images whose token was deleted from the text stop paying rent */
+function pruneImages() {
+  const re = /!\[image\]\(slateimg:([a-z0-9]+)\)/gi;
+  for (const n of notes) {
+    if (!n.images || !n.images.length) continue;
+    const keep = new Set();
+    let m;
+    re.lastIndex = 0;
+    while ((m = re.exec(String(n.body || "")))) keep.add(m[1]);
+    if (n.images.every(i => keep.has(i.id))) continue;
+    for (const im of n.images) if (!keep.has(im.id)) imgPool.set(im.id, im.src);
+    n.images = n.images.filter(i => keep.has(i.id));
+  }
+}
+
 function persist() {
   try {
+    pruneImages();
     localStorage.setItem(LS_NOTES, JSON.stringify(notes));
     dirty = false;
     savedEl.textContent = "Saved";
@@ -325,9 +373,10 @@ function relTime(ts) {
   return new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 function snippet(n) {
-  const text = (n.body || "").replace(/\s+/g, " ").trim();
+  const text = stripImgTokens(n.body || "").replace(/\s+/g, " ").trim();
   if (text) return text;
-  return (n.strokes && n.strokes.length) ? "Sketch" : "Empty note";
+  if (n.strokes && n.strokes.length) return "Sketch";
+  return (n.images && n.images.length) ? "Image attachment" : "Empty note";
 }
 function renderList() {
   const q = searchEl.value.trim().toLowerCase();
@@ -367,12 +416,13 @@ function selectNote(id, opts = {}) {
   const n = activeNote();
   if (!n) return;
   titleEl.value = n.title;
-  bodyEl.value = n.body;
+  renderEditor(n.body);
   undoStack = []; redoStack = [];
   renderList();
   fitCanvas();
   syncTools();
   updateCounts();
+  renderPasteChip();
   closeDrawer();
   if (opts.focus) bodyEl.focus();
 }
@@ -381,23 +431,46 @@ titleEl.addEventListener("input", () => {
   const n = activeNote(); if (!n) return;
   n.title = titleEl.value; touch(n); scheduleSave(); scheduleList();
 });
-bodyEl.addEventListener("input", () => {
+/* one commit path for every change to the note text */
+function commitEditor() {
   const n = activeNote(); if (!n) return;
-  n.body = bodyEl.value; touch(n); scheduleSave(); scheduleList(); updateCounts();
+  n.body = serializeEditor();
+  syncImagesFromDom(n);
+  touch(n); scheduleSave(); scheduleList(); updateCounts();
+}
+bodyEl.addEventListener("input", commitEditor);
+
+/* paste text as plain text — never let rich HTML from another app land in the note */
+bodyEl.addEventListener("paste", (e) => {
+  if (clipboardImage(e)) return;
+  const dt = e.clipboardData;
+  const text = dt ? dt.getData("text/plain") : "";
+  if (text === "" && !(dt && dt.types && dt.types.length)) return;
+  e.preventDefault();
+  document.execCommand("insertText", false, text);
+});
+
+/* click an image to look at it — a drag-select across it should not open the viewer */
+bodyEl.addEventListener("click", (e) => {
+  const t = e.target;
+  if (!t || t.tagName !== "IMG" || !t.dataset.img) return;
+  const sel = window.getSelection();
+  if (sel && !sel.isCollapsed) return;
+  openLightbox(t.src);
 });
 bodyEl.addEventListener("keydown", (e) => {
   if (e.key === "Tab") {
     e.preventDefault();
-    const s = bodyEl.selectionStart;
-    bodyEl.setRangeText("  ", s, bodyEl.selectionEnd, "end");
-    bodyEl.dispatchEvent(new Event("input"));
+    document.execCommand("insertText", false, "  ");
   }
 });
 
 function updateCounts() {
-  const text = bodyEl.value.trim();
+  const body = serializeEditor();
+  const text = stripImgTokens(body).trim();
   const words = text ? text.split(/\s+/).length : 0;
-  countsEl.textContent = `${words} ${words === 1 ? "word" : "words"} · ${bodyEl.value.length} chars`;
+  countsEl.textContent = `${words} ${words === 1 ? "word" : "words"} · ${body.length} chars`;
+  emptyHint.hidden = !!(text || bodyEl.querySelector("img"));
 }
 
 /* ---------- canvas ---------- */
@@ -442,8 +515,9 @@ function redraw() {
   ctx.clearRect(0, 0, W, H);
   const n = activeNote();
   if (!n) return;
+  paintImages(ctx, W, H);
   for (const s of n.strokes) paintStroke(s);
-  hintEl.style.opacity = n.strokes.length ? "0" : "1";
+  hintEl.style.opacity = (n.strokes.length || (n.pasted && n.pasted.length)) ? "0" : "1";
 }
 
 function pointFromEvent(e) {
@@ -455,9 +529,22 @@ function pointFromEvent(e) {
 }
 
 const snapshot = (arr) => arr.map(s => ({ c: s.c, w: s.w, e: !!s.e, p: s.p.slice() }));
+const clonePasted = (list) => (list || []).map(L => ({ id: L.id, src: L.src, x: L.x, y: L.y, w: L.w, h: L.h, on: L.on !== false }));
+
+/* a history entry is the whole drawable state, so paste/undo behave like strokes */
+function stateSnapshot() {
+  const n = activeNote(); if (!n) return null;
+  return { strokes: snapshot(n.strokes), pasted: clonePasted(n.pasted) };
+}
+function restoreState(st) {
+  const n = activeNote(); if (!n || !st) return;
+  n.strokes = st.strokes || [];
+  n.pasted = st.pasted || [];
+  touch(n); redraw(); scheduleSave(); scheduleList(); syncTools(); renderPasteChip();
+}
 function pushUndo() {
-  const n = activeNote(); if (!n) return;
-  undoStack.push(snapshot(n.strokes));
+  const st = stateSnapshot(); if (!st) return;
+  undoStack.push(st);
   if (undoStack.length > 60) undoStack.shift();
   redoStack = [];
 }
@@ -534,22 +621,22 @@ $("size").addEventListener("input", (e) => { brush = parseFloat(e.target.value) 
 
 function undo() {
   const n = activeNote(); if (!n || !undoStack.length) return;
-  redoStack.push(snapshot(n.strokes));
-  n.strokes = undoStack.pop();
-  touch(n); redraw(); scheduleSave(); scheduleList(); syncTools();
+  const st = stateSnapshot(); if (!st) return;
+  redoStack.push(st);
+  restoreState(undoStack.pop());
 }
 function redo() {
   const n = activeNote(); if (!n || !redoStack.length) return;
-  undoStack.push(snapshot(n.strokes));
-  n.strokes = redoStack.pop();
-  touch(n); redraw(); scheduleSave(); scheduleList(); syncTools();
+  const st = stateSnapshot(); if (!st) return;
+  undoStack.push(st);
+  restoreState(redoStack.pop());
 }
 $("undoBtn").addEventListener("click", undo);
 $("redoBtn").addEventListener("click", redo);
 
 $("pngBtn").addEventListener("click", () => {
   const n = activeNote(); if (!n) return;
-  if (!n.strokes.length) { toast("Nothing drawn yet."); return; }
+  if (!n.strokes.length && !(n.pasted && n.pasted.length)) { toast("Nothing drawn yet."); return; }
   const scale = 2;
   const out = document.createElement("canvas");
   out.width = Math.round(W * scale); out.height = Math.round(H * scale);
@@ -558,6 +645,7 @@ $("pngBtn").addEventListener("click", () => {
   o.fillStyle = paper || "#fff";
   o.fillRect(0, 0, out.width, out.height);
   o.scale(scale, scale);
+  paintImages(o, W, H);
   for (const s of n.strokes) {
     o.save();
     o.lineCap = "round"; o.lineJoin = "round"; o.strokeStyle = s.c;
@@ -591,15 +679,473 @@ if (window.ResizeObserver) {
 }
 window.addEventListener("resize", fitCanvas);
 
+
+/* ---------- pasted images ---------- */
+const RE_IMG = () => /!\[image\]\(slateimg:[a-z0-9]+\)/gi;
+const tokenFor = (id) => "![image](slateimg:" + id + ")";
+const stripImgTokens = (t) => String(t || "").replace(RE_IMG(), "");
+const numOr = (v, d) => (typeof v === "number" && isFinite(v)) ? v : d;
+
+function cleanImages(list) {
+  if (!Array.isArray(list)) return [];
+  const out = [];
+  for (const i of list) {
+    if (!i || typeof i.src !== "string" || i.src.indexOf("data:image/") !== 0) continue;
+    out.push({ id: typeof i.id === "string" && i.id ? i.id : uid(), src: i.src });
+  }
+  return out;
+}
+function cleanPasted(list) {
+  if (!Array.isArray(list)) return [];
+  const out = [];
+  for (const L of list) {
+    if (!L || typeof L.src !== "string" || L.src.indexOf("data:image/") !== 0) continue;
+    out.push({
+      id: typeof L.id === "string" && L.id ? L.id : uid(), src: L.src,
+      x: numOr(L.x, .08), y: numOr(L.y, .08), w: numOr(L.w, .84), h: numOr(L.h, .84),
+      on: L.on !== false
+    });
+  }
+  return out;
+}
+
+function openLightbox(src) { lightboxImg.src = src; lightbox.classList.add("show"); }
+function closeLightbox() { lightbox.classList.remove("show"); lightboxImg.removeAttribute("src"); }
+lightbox.addEventListener("click", closeLightbox);
+
+/* clipboard images are re-encoded smaller: localStorage holds about 5 MB per origin */
+let _webp = null;
+function canWebp() {
+  if (_webp !== null) return _webp;
+  try {
+    const c = document.createElement("canvas"); c.width = 1; c.height = 1;
+    _webp = c.toDataURL("image/webp").indexOf("data:image/webp") === 0;
+  } catch (_) { _webp = false; }
+  return _webp;
+}
+function decodeViaImg(file) {
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file);
+    const im = new Image();
+    im.onload = () => { URL.revokeObjectURL(url); res(im); };
+    im.onerror = () => { URL.revokeObjectURL(url); rej(new Error("bad image")); };
+    im.src = url;
+  });
+}
+function decodeImage(file) {
+  if (window.createImageBitmap) return createImageBitmap(file).catch(() => decodeViaImg(file));
+  return decodeViaImg(file);
+}
+function encodeImage(img, maxDim, quality) {
+  const w0 = img.width || img.naturalWidth || 1;
+  const h0 = img.height || img.naturalHeight || 1;
+  const s = Math.min(1, maxDim / Math.max(w0, h0));
+  const w = Math.max(1, Math.round(w0 * s)), h = Math.max(1, Math.round(h0 * s));
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  const x = c.getContext("2d");
+  if (x.imageSmoothingQuality) x.imageSmoothingQuality = "high";
+  x.drawImage(img, 0, 0, w, h);
+  return c.toDataURL(canWebp() ? "image/webp" : "image/jpeg", quality);
+}
+async function prepareImage(file) {
+  const img = await decodeImage(file);
+  const steps = [[1600, .86], [1280, .82], [1000, .78], [760, .74]];
+  let src = "";
+  for (const step of steps) {
+    src = encodeImage(img, step[0], step[1]);
+    if (src.length * 0.75 <= 380 * 1024) break;
+  }
+  if (img.close) { try { img.close(); } catch (_) { /* ImageBitmap */ } }
+  return src;
+}
+
+function clipboardImage(e) {
+  const dt = e.clipboardData;
+  if (!dt) return null;
+  if (dt.items) {
+    for (const it of Array.from(dt.items)) {
+      if (it.kind === "file" && it.type && it.type.indexOf("image/") === 0) {
+        const f = it.getAsFile();
+        if (f) return f;
+      }
+    }
+  }
+  if (dt.files) {
+    for (const f of Array.from(dt.files)) if (f.type && f.type.indexOf("image/") === 0) return f;
+  }
+  return null;
+}
+
+/* ---- images on the canvas, drawn under the ink ---- */
+const imgCache = new Map();
+function imageEl(id, src) {
+  let im = imgCache.get(id);
+  if (im) return im;
+  im = new Image();
+  im.decoding = "async";
+  im.onload = () => {
+    const n = activeNote();
+    if (n && (n.pasted || []).some(L => L.id === id)) redraw();
+  };
+  im.src = src;
+  imgCache.set(id, im);
+  return im;
+}
+function paintImages(c, w, h) {
+  const n = activeNote();
+  if (!n || !n.pasted || !n.pasted.length || !w || !h) return;
+  for (const L of n.pasted) {
+    if (L.on === false) continue;
+    const im = imageEl(L.id, L.src);
+    if (!im.naturalWidth) continue;
+    c.drawImage(im, L.x * w, L.y * h, L.w * w, L.h * h);
+  }
+}
+
+function renderPasteChip() {
+  const n = activeNote();
+  const list = (n && n.pasted) ? n.pasted : [];
+  if (!list.length) { pasteChip.classList.remove("on"); return; }
+  const last = list[list.length - 1];
+  pasteChip.classList.add("on");
+  $("chipThumb").src = last.src;
+  $("chipLabel").textContent = list.length > 1 ? list.length + " images" : "Pasted image";
+  const shown = list.some(L => L.on !== false);
+  const eye = $("chipEye");
+  eye.textContent = shown ? "◉" : "◎";
+  eye.title = shown ? "Hide pasted image" : "Show pasted image";
+  eye.setAttribute("aria-pressed", String(shown));
+}
+
+async function pasteIntoCanvas(file) {
+  const n = activeNote(); if (!n) return;
+  const noteId = n.id;
+  let src;
+  try { src = await prepareImage(file); } catch (_) { toast("Couldn't read that image."); return; }
+  if (!activeNote() || activeNote().id !== noteId) return;
+  if (W < 2 || H < 2) fitCanvas();
+
+  const id = uid();
+  const probe = new Image();
+  await new Promise(res => { probe.onload = res; probe.onerror = res; probe.src = src; });
+  const iw = probe.naturalWidth || W, ih = probe.naturalHeight || H;
+  const pad = 0.05;
+  const scale = Math.min((W * (1 - pad * 2)) / iw, (H * (1 - pad * 2)) / ih);
+  const w = (iw * scale) / W, h = (ih * scale) / H;
+
+  pushUndo();
+  n.pasted.push({ id, src, x: (1 - w) / 2, y: (1 - h) / 2, w, h, on: true });
+  touch(n);
+  imageEl(id, src);
+  redraw(); scheduleSave(); scheduleList(); syncTools(); renderPasteChip();
+  toast("Image pasted — draw over it, ⌘Z undoes");
+}
+
+/* ---- the note body: plain text + images inline, at the caret ---- */
+const imgPool = new Map();   /* id → src for this session, so undo can resurrect a pruned image */
+const BLOCK_TAGS = /^(DIV|P|LI|UL|OL|BLOCKQUOTE|PRE|H[1-6])$/;
+
+function srcFor(id) {
+  const n = activeNote();
+  const hit = n && (n.images || []).find(i => i.id === id);
+  if (hit) return hit.src;
+  return imgPool.get(id) || "";
+}
+function makeImgEl(id) {
+  const im = document.createElement("img");
+  im.className = "note-img";
+  im.dataset.img = id;
+  im.alt = "attached image";
+  im.draggable = false;
+  im.setAttribute("contenteditable", "false");
+  im.src = srcFor(id);
+  return im;
+}
+
+function lineNode(line) {
+  const d = document.createElement("div");
+  d.className = "ln";
+  const re = /!\[image\]\(slateimg:([a-z0-9]+)\)/gi;
+  let last = 0, m;
+  while ((m = re.exec(line))) {
+    if (m.index > last) d.appendChild(document.createTextNode(line.slice(last, m.index)));
+    const src = srcFor(m[1]);
+    /* a token with no stored image stays readable as text instead of a broken picture */
+    d.appendChild(src ? makeImgEl(m[1]) : document.createTextNode(m[0]));
+    last = m.index + m[0].length;
+  }
+  if (last < line.length) d.appendChild(document.createTextNode(line.slice(last)));
+  return d;
+}
+
+function renderEditor(text) {
+  const frag = document.createDocumentFragment();
+  for (const line of String(text == null ? "" : text).split("\n")) frag.appendChild(lineNode(line));
+  bodyEl.replaceChildren(frag);
+}
+
+/* DOM → text. A block is a line, a <br> is a break, an <img> is its token. */
+function serializeEditor() {
+  const lines = [];
+  let buf = "";
+  const pushLine = () => { lines.push(buf); buf = ""; };
+  const inline = (node) => {
+    const kids = node.childNodes;
+    let seen = false;
+    for (let i = 0; i < kids.length; i++) {
+      const ch = kids[i];
+      if (ch.nodeType === 3) { buf += ch.data.replace(/\u00a0/g, " "); seen = true; continue; }
+      if (ch.nodeType !== 1) continue;
+      const tag = ch.tagName;
+      if (tag === "IMG") {
+        if (ch.dataset.img) { buf += tokenFor(ch.dataset.img); seen = true; }
+        continue;
+      }
+      if (tag === "BR") {
+        /* chrome parks a filler <br> in empty blocks and at the end of blocks */
+        if (node !== bodyEl && (kids.length === 1 || i === kids.length - 1)) continue;
+        pushLine(); seen = true;
+        continue;
+      }
+      if (BLOCK_TAGS.test(tag)) {
+        if (seen) pushLine();
+        seen = true;
+        inline(ch);
+        continue;
+      }
+      inline(ch);
+      seen = true;
+    }
+  };
+  let first = true;
+  for (const ch of bodyEl.childNodes) {
+    if (ch.nodeType === 1 && BLOCK_TAGS.test(ch.tagName)) {
+      if (!first) pushLine();
+      first = false;
+      inline(ch);
+    } else if (ch.nodeType === 1 && ch.tagName === "BR") {
+      pushLine();
+      first = false;
+    } else {
+      inline(ch);
+      first = false;
+    }
+  }
+  lines.push(buf);
+  return lines.join("\n");
+}
+
+/* an image restored by native undo may have been pruned from the record — put it back */
+function syncImagesFromDom(n) {
+  if (!n) return;
+  for (const im of bodyEl.querySelectorAll("img[data-img]")) {
+    const id = im.dataset.img;
+    if (!id) continue;
+    if (!imgPool.has(id) && im.src) imgPool.set(id, im.src);
+    if (!n.images.some(x => x.id === id)) {
+      const src = imgPool.get(id) || im.src;
+      if (src) n.images.push({ id, src });
+    }
+  }
+}
+
+function caretInEditor() {
+  const sel = window.getSelection();
+  return !!(sel && sel.rangeCount && bodyEl.contains(sel.getRangeAt(0).startContainer));
+}
+function caretToEnd() {
+  const sel = window.getSelection();
+  if (!sel) return;
+  let target = bodyEl.lastElementChild;
+  if (!target || (!target.textContent.trim() && !target.querySelector("img"))) {
+    target = document.createElement("div");
+    target.className = "ln";
+    bodyEl.appendChild(target);
+  }
+  const r = document.createRange();
+  r.selectNodeContents(target);
+  r.collapse(false);
+  sel.removeAllRanges();
+  sel.addRange(r);
+}
+function insertImageAtCaret(id) {
+  bodyEl.focus();
+  if (!caretInEditor()) caretToEnd();
+  const html = makeImgEl(id).outerHTML;
+  let ok = false;
+  try { ok = document.execCommand("insertHTML", false, html); } catch (_) { ok = false; }
+  let placed = !!bodyEl.querySelector('img[data-img="' + id + '"]');
+  if (!ok || !placed) {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount) {
+      const r = sel.getRangeAt(0);
+      r.deleteContents();
+      r.insertNode(makeImgEl(id));
+      sel.removeAllRanges();
+      sel.addRange(r);
+    }
+  }
+  /* the caret must sit right after the picture, or typing after a paste goes nowhere */
+  const im = bodyEl.querySelector('img[data-img="' + id + '"]');
+  const sel2 = window.getSelection();
+  if (im && sel2) {
+    const r2 = document.createRange();
+    r2.setStartAfter(im);
+    r2.collapse(true);
+    sel2.removeAllRanges();
+    sel2.addRange(r2);
+    /* nothing follows the picture on its line: keep typing below it, not beside it */
+    const rest = im.nextSibling;
+    const alone = !rest || (rest.nodeType === 3 && !rest.data.trim());
+    if (alone) { try { document.execCommand("insertParagraph"); } catch (_) {} }
+  }
+}
+
+async function attachToNote(file) {
+  const n0 = activeNote(); if (!n0) return;
+  const noteId = n0.id;
+  let src;
+  try { src = await prepareImage(file); } catch (_) { toast("Couldn't read that image."); return; }
+  const n = notes.find(x => x.id === noteId);
+  if (!n) return;
+  const id = uid();
+  imgPool.set(id, src);
+  n.images.push({ id, src });
+  if (activeId !== noteId) { scheduleSave(); renderList(); return; }   /* switched away meanwhile */
+  insertImageAtCaret(id);
+  n.body = serializeEditor();
+  touch(n); scheduleSave(); scheduleList(); updateCounts();
+  toast("Image in place — click it to zoom, Backspace to remove");
+}
+
+/* ---- where a paste lands: focused pane wins, otherwise the visible one ---- */
+document.addEventListener("paste", (e) => {
+  const file = clipboardImage(e);
+  if (!file) return;
+  const t = e.target;
+  if (t === searchEl || t === titleEl) return;
+
+  const edOn = document.querySelector(".editor-pane").getBoundingClientRect().width > 0;
+  const cvOn = document.querySelector(".canvas-pane").getBoundingClientRect().width > 0;
+  let target = null;
+  if ((t === cv || document.activeElement === cv) && cvOn) target = "canvas";
+  else if (((t && bodyEl.contains(t)) || document.activeElement === bodyEl) && edOn) target = "note";
+  else if (!edOn && cvOn) target = "canvas";
+  else if (edOn) target = "note";
+  else if (cvOn) target = "canvas";
+  if (!target) return;
+
+  e.preventDefault();
+  if (target === "note") attachToNote(file); else pasteIntoCanvas(file);
+}, true);
+
+/* dropping a file works like pasting one */
+document.addEventListener("drop", (e) => {
+  const dt = e.dataTransfer;
+  let file = null;
+  if (dt) {
+    for (const f of Array.from(dt.files || [])) if (f.type && f.type.indexOf("image/") === 0) { file = f; break; }
+    if (!file) for (const it of Array.from(dt.items || [])) {
+      if (it.kind === "file" && it.type.indexOf("image/") === 0) { file = it.getAsFile(); break; }
+    }
+  }
+  if (!file) return;
+  e.preventDefault();
+  const t = e.target;
+  if (t && (t === bodyEl || bodyEl.contains(t))) {
+    let r = null;
+    try { r = document.caretRangeFromPoint ? document.caretRangeFromPoint(e.clientX, e.clientY) : null; } catch (_) {}
+    if (r) {
+      const sel = window.getSelection();
+      if (sel) { sel.removeAllRanges(); sel.addRange(r); }
+    }
+    attachToNote(file);
+  } else if (t && t.closest && t.closest(".canvas-pane")) {
+    pasteIntoCanvas(file);
+  } else if (document.querySelector(".canvas-pane").getBoundingClientRect().width === 0) {
+    attachToNote(file);
+  }
+}, true);
+
+/* an image is atomic, so chrome will not delete it on its own — do it for it */
+function adjacentImg(dir) {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount || !sel.isCollapsed) return null;
+  const r = sel.getRangeAt(0);
+  const node = r.startContainer, off = r.startOffset;
+  const isImg = (n) => !!(n && n.nodeType === 1 && n.tagName === "IMG" && n.dataset.img);
+  if (node.nodeType === 3) {
+    if (dir === "back" && off === 0) {
+      let p = node.previousSibling;
+      while (p && p.nodeType === 1 && p.tagName === "SPAN" && !p.textContent) p = p.previousSibling;
+      return isImg(p) ? p : null;
+    }
+    if (dir === "fwd" && off === node.length) {
+      let n = node.nextSibling;
+      while (n && n.nodeType === 1 && n.tagName === "SPAN" && !n.textContent) n = n.nextSibling;
+      return isImg(n) ? n : null;
+    }
+    return null;
+  }
+  if (node.nodeType === 1) {
+    const ch = node.childNodes[dir === "back" ? off - 1 : off];
+    return isImg(ch) ? ch : null;
+  }
+  return null;
+}
+bodyEl.addEventListener("keydown", (e) => {
+  if (e.key !== "Backspace" && e.key !== "Delete") return;
+  const im = adjacentImg(e.key === "Backspace" ? "back" : "fwd");
+  if (!im) return;
+  e.preventDefault();
+  /* select it and let the editor delete it, so ⌘Z can bring it back */
+  const sel = window.getSelection();
+  if (!sel) return;
+  const r = document.createRange();
+  r.selectNode(im);
+  sel.removeAllRanges();
+  sel.addRange(r);
+  let ok = false;
+  try { ok = document.execCommand("delete"); } catch (_) { ok = false; }
+  if (!ok && im.parentNode) im.remove();
+  commitEditor();
+});
+
+/* clicking the canvas gives it focus, so ⌘V afterwards means "paste onto the drawing" */
+cv.addEventListener("pointerdown", () => {
+  try { cv.focus({ preventScroll: true }); } catch (_) { try { cv.focus(); } catch (__) {} }
+}, true);
+
+$("chipThumb").addEventListener("click", () => {
+  const n = activeNote();
+  if (n && n.pasted && n.pasted.length) openLightbox(n.pasted[n.pasted.length - 1].src);
+});
+$("chipEye").addEventListener("click", () => {
+  const n = activeNote();
+  if (!n || !n.pasted || !n.pasted.length) return;
+  const hide = n.pasted.some(L => L.on !== false);
+  n.pasted.forEach(L => { L.on = !hide; });
+  touch(n); redraw(); scheduleSave(); renderPasteChip();
+});
+$("chipX").addEventListener("click", () => {
+  const n = activeNote();
+  if (!n || !n.pasted || !n.pasted.length) return;
+  pushUndo();
+  n.pasted = [];
+  touch(n); redraw(); scheduleSave(); scheduleList(); syncTools(); renderPasteChip();
+  toast("Pasted image removed — ⌘Z brings it back");
+});
+
 /* ---------- actions ---------- */
 function newNote() {
   saveNow();
   const n = blankNote();
   notes.unshift(n);
   activeId = n.id;
-  titleEl.value = ""; bodyEl.value = "";
+  titleEl.value = ""; renderEditor("");
   undoStack = []; redoStack = [];
-  renderList(); fitCanvas(); syncTools(); updateCounts();
+  renderList(); fitCanvas(); syncTools(); updateCounts(); renderPasteChip();
   titleEl.focus();
   scheduleSave();
   toast("New note");
@@ -656,6 +1202,7 @@ $("fileInput").addEventListener("change", async (e) => {
       notes.unshift({
         id: uid(), title: String(n.title || ""), body: String(n.body || ""),
         strokes: Array.isArray(n.strokes) ? n.strokes : [],
+        images: cleanImages(n.images), pasted: cleanPasted(n.pasted),
         created: n.created || now(), updated: n.updated || now()
       });
       added++;
@@ -687,7 +1234,7 @@ function unb64url(str) {
   return out;
 }
 async function packNote(n) {
-  const payload = JSON.stringify({ t: n.title, b: n.body, s: n.strokes });
+  const payload = JSON.stringify({ t: n.title, b: n.body, s: n.strokes, i: cleanImages(n.images), p: cleanPasted(n.pasted) });
   if (!("CompressionStream" in window)) return "raw." + b64url(new TextEncoder().encode(payload));
   const stream = new Blob([payload]).stream().pipeThrough(new CompressionStream("deflate-raw"));
   const buf = new Uint8Array(await new Response(stream).arrayBuffer());
@@ -705,7 +1252,11 @@ async function unpackNote(token) {
     text = await new Response(stream).text();
   }
   const d = JSON.parse(text);
-  return { title: String(d.t || ""), body: String(d.b || ""), strokes: Array.isArray(d.s) ? d.s : [] };
+  return {
+    title: String(d.t || ""), body: String(d.b || ""),
+    strokes: Array.isArray(d.s) ? d.s : [],
+    images: cleanImages(d.i), pasted: cleanPasted(d.p)
+  };
 }
 
 $("shareBtn").addEventListener("click", async () => {
@@ -730,12 +1281,12 @@ async function importFromHash() {
   if (!h.startsWith("#n=")) return;
   try {
     const d = await unpackNote(h.slice(3));
-    const n = blankNote({ title: d.title, body: d.body, strokes: d.strokes });
+    const n = blankNote({ title: d.title, body: d.body, strokes: d.strokes, images: d.images, pasted: d.pasted });
     notes.unshift(n);
     activeId = n.id;
     persist();
     history.replaceState(null, "", location.pathname + location.search);
-    titleEl.value = n.title; bodyEl.value = n.body;
+    titleEl.value = n.title; renderEditor(n.body);
     toast("Note imported from link");
   } catch (e) {
     toast("That link couldn't be read.");
@@ -782,6 +1333,7 @@ document.addEventListener("keydown", (e) => {
     if (e.shiftKey) redo(); else undo();
   }
   else if (e.key === "Escape") {
+    if (lightbox.classList.contains("show")) { closeLightbox(); return; }
     if (sidebar.classList.contains("open")) closeDrawer();
     else if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
   }
@@ -802,11 +1354,12 @@ applyTheme(localStorage.getItem(LS_THEME) || (matchMedia("(prefers-color-scheme:
 buildSwatches();
 applyMode(localStorage.getItem(LS_MODE) || (window.innerWidth <= 940 ? "write" : "split"));
 titleEl.value = activeNote().title;
-bodyEl.value = activeNote().body;
+renderEditor(activeNote().body);
 renderList();
 updateCounts();
+renderPasteChip();
 requestAnimationFrame(() => { fitCanvas(); syncTools(); });
-importFromHash().finally(() => { renderList(); });
+importFromHash().finally(() => { renderList(); renderPasteChip(); fitCanvas(); });
 window.addEventListener("beforeunload", saveNow);
 document.addEventListener("visibilitychange", () => { if (document.hidden) saveNow(); });
 })();
