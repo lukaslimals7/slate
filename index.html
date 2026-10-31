@@ -112,7 +112,31 @@
     padding:30px 34px 60px; color:var(--ink); min-height:0;
     white-space:pre-wrap; overflow-wrap:break-word; word-break:break-word; caret-color:var(--ink);
   }
-  #body .ln{min-height:1.72em}
+  .editor-wrap{flex:1; min-height:0; position:relative; display:flex; flex-direction:column}
+  .editor-tools{gap:3px; padding:5px 10px}
+  .fmt-btn{height:26px; min-width:26px; padding:0 7px; border-radius:6px; font-size:11.5px; color:var(--muted); display:inline-flex; align-items:center; justify-content:center; transition:.12s; letter-spacing:.01em}
+  .fmt-btn:hover{background:var(--hover); color:var(--ink)}
+  .fmt-btn.on{background:var(--active); color:var(--ink)}
+  #body .ln{min-height:1.72em; position:relative}
+  #body .ln[data-t="h1"]{font-size:26px; line-height:1.35; font-weight:500; letter-spacing:-.012em; margin:16px 0 2px; min-height:1.35em}
+  #body .ln[data-t="h2"]{font-size:21px; line-height:1.4; font-weight:500; letter-spacing:-.006em; margin:13px 0 1px; min-height:1.4em}
+  #body .ln[data-t="h3"]{font-size:18px; line-height:1.45; font-weight:500; margin:10px 0 0; min-height:1.45em}
+  #body .ln[data-t="ul"], #body .ln[data-t="ol"]{padding-left:24px}
+  #body .ln[data-t="ul"]::before{content:"•"; position:absolute; left:7px; color:var(--accent); opacity:.8}
+  #body .ln[data-t="ol"]::before{content:attr(data-n) "."; position:absolute; left:0; width:19px; text-align:right; color:var(--muted); font-size:.88em; font-variant-numeric:tabular-nums}
+  #body .ln[data-t="code"]{
+    font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size:13.5px; line-height:1.62; letter-spacing:0; color:var(--ink);
+    background:var(--bg); padding:0 13px; min-height:1.62em;
+    border-left:1px solid var(--line); border-right:1px solid var(--line);
+  }
+  #body .ln[data-t="code"].code-first{padding-top:9px; border-top:1px solid var(--line); border-radius:9px 9px 0 0; margin-top:8px}
+  #body .ln[data-t="code"].code-last{padding-bottom:9px; border-bottom:1px solid var(--line); border-radius:0 0 9px 9px; margin-bottom:10px}
+  #body .ln[data-t="code"].code-first.code-last{border-radius:9px}
+  #body a{color:var(--accent); text-decoration:none; border-bottom:1px solid var(--accent-soft); cursor:pointer}
+  #body a:hover{border-bottom-color:var(--accent)}
+  .code-copy{position:absolute; z-index:3; font-size:11px; color:var(--muted); background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:3px 8px; opacity:0; pointer-events:none; transition:opacity .12s; box-shadow:var(--shadow)}
+  .code-copy.on{opacity:1; pointer-events:auto}
   #body .note-img{display:inline-block; vertical-align:bottom; max-width:100%; max-height:62vh; margin:6px 2px; border-radius:8px; border:1px solid var(--line); background:var(--bg); cursor:zoom-in}
   #body .note-img:focus, #body .note-img.selected{outline:2px solid var(--accent); outline-offset:2px}
   .empty-hint{position:absolute; top:30px; left:34px; font-family:var(--serif); font-size:16.5px; line-height:1.72; color:var(--faint); pointer-events:none}
@@ -232,8 +256,21 @@
 
     <section class="workspace">
       <div class="pane editor-pane">
-        <div id="body" contenteditable="true" spellcheck="true" role="textbox" aria-multiline="true" aria-label="Note"></div>
-        <div class="empty-hint" id="emptyHint">Start writing…</div>
+        <div class="tools editor-tools" id="editorTools" role="group" aria-label="Formatting">
+          <button class="fmt-btn" data-fmt="p" title="Paragraph">¶</button>
+          <button class="fmt-btn" data-fmt="h1" title="Heading 1">H1</button>
+          <button class="fmt-btn" data-fmt="h2" title="Heading 2">H2</button>
+          <span class="divider"></span>
+          <button class="fmt-btn" data-fmt="ul" title="Bulleted list">•</button>
+          <button class="fmt-btn" data-fmt="ol" title="Numbered list">1.</button>
+          <span class="divider"></span>
+          <button class="fmt-btn" data-fmt="code" title="Code block">&lt;/&gt;</button>
+        </div>
+        <div class="editor-wrap">
+          <div id="body" contenteditable="true" spellcheck="true" role="textbox" aria-multiline="true" aria-label="Note"></div>
+          <div class="empty-hint" id="emptyHint">Start writing…</div>
+          <button class="code-copy" id="codeCopy" type="button" title="Copy this code">Copy</button>
+        </div>
       </div>
       <div class="pane canvas-pane">
         <div class="tools" id="tools">
@@ -373,7 +410,7 @@ function relTime(ts) {
   return new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 function snippet(n) {
-  const text = stripImgTokens(n.body || "").replace(/\s+/g, " ").trim();
+  const text = plainBody(n.body || "");
   if (text) return text;
   if (n.strokes && n.strokes.length) return "Sketch";
   return (n.images && n.images.length) ? "Image attachment" : "Empty note";
@@ -441,22 +478,53 @@ function commitEditor() {
 bodyEl.addEventListener("input", commitEditor);
 
 /* paste text as plain text — never let rich HTML from another app land in the note */
+function pastePlain(text) {
+  const lines = String(text).replace(/\r/g, "").split("\n");
+  let inCode = false;
+  const drops = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (i > 0) {
+      document.execCommand("insertParagraph");
+      /* a split block copies its type — every pasted line starts clean */
+      const nb = blockOfCaret();
+      if (nb) setBlockType(nb, inCode ? "code" : "p");
+    }
+    const line = lines[i];
+    if (/^```/.test(line)) {
+      /* a fence is a marker, not a line of the note */
+      const b = blockOfCaret();
+      if (b && !b.textContent.trim()) drops.push(b);
+      inCode = !inCode;
+      continue;
+    }
+    document.execCommand("insertText", false, line);
+    const b = blockOfCaret();
+    if (!b) continue;
+    if (inCode) setBlockType(b, "code"); else normalizeBlock(b);
+  }
+  for (const d of drops) if (d.isConnected && blocksOf().length > 1) d.remove();
+  commitEditor();
+}
 bodyEl.addEventListener("paste", (e) => {
   if (clipboardImage(e)) return;
   const dt = e.clipboardData;
   const text = dt ? dt.getData("text/plain") : "";
   if (text === "" && !(dt && dt.types && dt.types.length)) return;
   e.preventDefault();
-  document.execCommand("insertText", false, text);
+  pastePlain(text);
 });
 
 /* click an image to look at it — a drag-select across it should not open the viewer */
 bodyEl.addEventListener("click", (e) => {
-  const t = e.target;
-  if (!t || t.tagName !== "IMG" || !t.dataset.img) return;
   const sel = window.getSelection();
-  if (sel && !sel.isCollapsed) return;
-  openLightbox(t.src);
+  if (sel && !sel.isCollapsed) return;          /* a drag-select is not a click */
+  const t = e.target;
+  if (t && t.tagName === "A" && t.getAttribute("href")) {
+    e.preventDefault();
+    window.open(t.getAttribute("href"), "_blank", "noopener,noreferrer");
+    return;
+  }
+  if (t && t.tagName === "IMG" && t.dataset.img) openLightbox(t.src);
 });
 bodyEl.addEventListener("keydown", (e) => {
   if (e.key === "Tab") {
@@ -467,7 +535,7 @@ bodyEl.addEventListener("keydown", (e) => {
 
 function updateCounts() {
   const body = serializeEditor();
-  const text = stripImgTokens(body).trim();
+  const text = blocksOf().map(el => el.textContent).join("\n").trim();
   const words = text ? text.split(/\s+/).length : 0;
   countsEl.textContent = `${words} ${words === 1 ? "word" : "words"} · ${body.length} chars`;
   emptyHint.hidden = !!(text || bodyEl.querySelector("img"));
@@ -681,9 +749,7 @@ window.addEventListener("resize", fitCanvas);
 
 
 /* ---------- pasted images ---------- */
-const RE_IMG = () => /!\[image\]\(slateimg:[a-z0-9]+\)/gi;
 const tokenFor = (id) => "![image](slateimg:" + id + ")";
-const stripImgTokens = (t) => String(t || "").replace(RE_IMG(), "");
 const numOr = (v, d) => (typeof v === "number" && isFinite(v)) ? v : d;
 
 function cleanImages(list) {
@@ -842,9 +908,15 @@ async function pasteIntoCanvas(file) {
   toast("Image pasted — draw over it, ⌘Z undoes");
 }
 
-/* ---- the note body: plain text + images inline, at the caret ---- */
+/* ---- the note body: markdown-ish blocks, formatted in place ---- */
 const imgPool = new Map();   /* id → src for this session, so undo can resurrect a pruned image */
 const BLOCK_TAGS = /^(DIV|P|LI|UL|OL|BLOCKQUOTE|PRE|H[1-6])$/;
+const TYPE_PREFIX = { h1: "# ", h2: "## ", h3: "### ", ul: "- " };
+const URL_RE = /\b(?:https?:\/\/|www\.)[^\s<>"']+/gi;
+const IMG_RE = () => /!\[image\]\(slateimg:([a-z0-9]+)\)/gi;
+
+const blockType = (el) => (el && el.dataset && el.dataset.t) || "p";
+const blocksOf = () => Array.from(bodyEl.children).filter(el => el.nodeType === 1);
 
 function srcFor(id) {
   const n = activeNote();
@@ -862,78 +934,160 @@ function makeImgEl(id) {
   im.src = srcFor(id);
   return im;
 }
+function makeLink(url) {
+  const a = document.createElement("a");
+  a.href = /^https?:\/\//i.test(url) ? url : "https://" + url;
+  a.textContent = url;
+  a.title = a.href;
+  a.setAttribute("href", a.href);
+  return a;
+}
 
-function lineNode(line) {
-  const d = document.createElement("div");
-  d.className = "ln";
-  const re = /!\[image\]\(slateimg:([a-z0-9]+)\)/gi;
+/* text → nodes, with urls turning into links as they are written */
+function inlineNodes(text) {
+  const frag = document.createDocumentFragment();
   let last = 0, m;
-  while ((m = re.exec(line))) {
-    if (m.index > last) d.appendChild(document.createTextNode(line.slice(last, m.index)));
-    const src = srcFor(m[1]);
-    /* a token with no stored image stays readable as text instead of a broken picture */
-    d.appendChild(src ? makeImgEl(m[1]) : document.createTextNode(m[0]));
+  const re = new RegExp(URL_RE.source, "gi");
+  while ((m = re.exec(text))) {
+    let url = m[0];
+    const tail = (/[.,;:!?)\]}"']+$/.exec(url) || [""])[0];
+    if (tail) url = url.slice(0, -tail.length);
+    if (!url || url === "www." || url === "https://" || url === "http://") continue;
+    if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+    frag.appendChild(makeLink(url));
+    if (tail) frag.appendChild(document.createTextNode(tail));
     last = m.index + m[0].length;
   }
-  if (last < line.length) d.appendChild(document.createTextNode(line.slice(last)));
+  if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+  return frag;
+}
+
+function appendInline(el, text) {
+  const re = IMG_RE();
+  let last = 0, m;
+  while ((m = re.exec(text))) {
+    if (m.index > last) el.appendChild(inlineNodes(text.slice(last, m.index)));
+    const src = srcFor(m[1]);
+    /* a token with no stored image stays readable as text instead of a broken picture */
+    el.appendChild(src ? makeImgEl(m[1]) : document.createTextNode(m[0]));
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) el.appendChild(inlineNodes(text.slice(last)));
+}
+
+function makeBlock(type, text) {
+  const d = document.createElement("div");
+  d.className = "ln";
+  if (type && type !== "p") d.dataset.t = type;
+  /* code is literal: no url sniffing, no image tokens */
+  if (type === "code") d.textContent = text;
+  else appendInline(d, text);
   return d;
 }
 
+/* the stored text, line by line, decides the block type */
 function renderEditor(text) {
   const frag = document.createDocumentFragment();
-  for (const line of String(text == null ? "" : text).split("\n")) frag.appendChild(lineNode(line));
+  const lines = String(text == null ? "" : text).split("\n");
+  let inCode = false, run = [];
+  const closeCode = () => {
+    if (!run.length) run.push("");
+    for (const l of run) frag.appendChild(makeBlock("code", l));
+    run = [];
+  };
+  for (const line of lines) {
+    if (/^```/.test(line)) {
+      if (inCode) { closeCode(); inCode = false; } else { inCode = true; }
+      continue;
+    }
+    if (inCode) { run.push(line); continue; }
+    let m;
+    if ((m = /^(#{1,3})(?:\s+(.*))?$/.exec(line))) frag.appendChild(makeBlock("h" + m[1].length, m[2] || ""));
+    else if ((m = /^[-*](?:\s+(.*))?$/.exec(line))) frag.appendChild(makeBlock("ul", m[1] || ""));
+    else if ((m = /^\d+[.)](?:\s+(.*))?$/.exec(line))) frag.appendChild(makeBlock("ol", m[1] || ""));
+    else frag.appendChild(makeBlock("p", line));
+  }
+  if (inCode) closeCode();
+  if (!frag.childNodes.length) frag.appendChild(makeBlock("p", ""));
   bodyEl.replaceChildren(frag);
+  decorateBlocks();
 }
 
-/* DOM → text. A block is a line, a <br> is a break, an <img> is its token. */
-function serializeEditor() {
-  const lines = [];
-  let buf = "";
-  const pushLine = () => { lines.push(buf); buf = ""; };
-  const inline = (node) => {
+/* numbers, and the rounded ends of a code run */
+function decorateBlocks() {
+  let n = 0;
+  const list = blocksOf();
+  list.forEach((el, i) => {
+    el.classList.add("ln");
+    const t = blockType(el);
+    if (t === "ol") { n += 1; el.dataset.n = String(n); } else n = 0;
+    const isCode = t === "code";
+    const prev = list[i - 1], next = list[i + 1];
+    el.classList.toggle("code-first", isCode && (!prev || blockType(prev) !== "code"));
+    el.classList.toggle("code-last", isCode && (!next || blockType(next) !== "code"));
+  });
+}
+
+/* one block's inline text: text nodes, image tokens, hard breaks */
+function blockText(el) {
+  const parts = [];
+  const walk = (node) => {
     const kids = node.childNodes;
-    let seen = false;
     for (let i = 0; i < kids.length; i++) {
       const ch = kids[i];
-      if (ch.nodeType === 3) { buf += ch.data.replace(/\u00a0/g, " "); seen = true; continue; }
+      if (ch.nodeType === 3) { parts.push(ch.data.replace(/\u00a0/g, " ")); continue; }
       if (ch.nodeType !== 1) continue;
       const tag = ch.tagName;
-      if (tag === "IMG") {
-        if (ch.dataset.img) { buf += tokenFor(ch.dataset.img); seen = true; }
-        continue;
-      }
+      if (tag === "IMG") { if (ch.dataset.img) parts.push(tokenFor(ch.dataset.img)); continue; }
       if (tag === "BR") {
-        /* chrome parks a filler <br> in empty blocks and at the end of blocks */
         if (node !== bodyEl && (kids.length === 1 || i === kids.length - 1)) continue;
-        pushLine(); seen = true;
+        parts.push("\n");
         continue;
       }
-      if (BLOCK_TAGS.test(tag)) {
-        if (seen) pushLine();
-        seen = true;
-        inline(ch);
-        continue;
-      }
-      inline(ch);
-      seen = true;
+      walk(ch);
     }
   };
-  let first = true;
-  for (const ch of bodyEl.childNodes) {
-    if (ch.nodeType === 1 && BLOCK_TAGS.test(ch.tagName)) {
-      if (!first) pushLine();
-      first = false;
-      inline(ch);
-    } else if (ch.nodeType === 1 && ch.tagName === "BR") {
-      pushLine();
-      first = false;
-    } else {
-      inline(ch);
-      first = false;
+  walk(el);
+  return parts.join("");
+}
+
+function serializeEditor() {
+  const out = [];
+  const list = blocksOf();
+  for (let i = 0; i < list.length; i++) {
+    const el = list[i];
+    const t = blockType(el);
+    const text = blockText(el);
+    if (t === "code") {
+      const first = el.classList.contains("code-first");
+      const last = el.classList.contains("code-last");
+      if (first) out.push("```");
+      if (!(first && last && text === "")) out.push(text);
+      if (last) out.push("```");
+      continue;
     }
+    if (text.indexOf("\n") !== -1) {
+      const head = TYPE_PREFIX[t] || "";
+      out.push(head + text.split("\n").join("\n" + head));
+      continue;
+    }
+    if (t === "ol") out.push((el.dataset.n || "1") + ". " + text);
+    else out.push((TYPE_PREFIX[t] || "") + text);
   }
-  lines.push(buf);
-  return lines.join("\n");
+  if (!out.length) out.push("");
+  return out.join("\n");
+}
+
+/* anything read as prose: strips markers and image tokens */
+function plainBody(body) {
+  return String(body || "")
+    .replace(/!\[image\]\(slateimg:[a-z0-9]+\)/gi, " ")
+    .replace(/^```.*$/gm, " ")
+    .replace(/^#{1,3}\s+/gm, "")
+    .replace(/^[-*]\s+/gm, "")
+    .replace(/^\d+[.)]\s+/gm, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /* an image restored by native undo may have been pruned from the record — put it back */
@@ -950,6 +1104,225 @@ function syncImagesFromDom(n) {
   }
 }
 
+/* ---------- caret helpers (block-relative, so linkifying cannot lose it) ---------- */
+function setSelRange(r) {
+  const sel = window.getSelection();
+  if (!sel) return;
+  sel.removeAllRanges();
+  sel.addRange(r);
+}
+function caretOffset(el) {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return null;
+  const r = sel.getRangeAt(0);
+  if (!el.contains(r.startContainer)) return null;
+  const pre = document.createRange();
+  pre.selectNodeContents(el);
+  pre.setEnd(r.startContainer, r.startOffset);
+  return pre.toString().length;
+}
+function setCaretOffset(el, n) {
+  let left = Math.max(0, n);
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  let node;
+  while ((node = walker.nextNode())) {
+    if (left <= node.data.length) {
+      const r = document.createRange();
+      r.setStart(node, left);
+      r.collapse(true);
+      setSelRange(r);
+      return;
+    }
+    left -= node.data.length;
+  }
+  const r = document.createRange();
+  r.selectNodeContents(el);
+  r.collapse(false);
+  setSelRange(r);
+}
+function blockOfCaret() {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return null;
+  let n = sel.getRangeAt(0).startContainer;
+  if (n && n.nodeType === 3) n = n.parentNode;
+  while (n && n !== bodyEl && n.parentNode !== bodyEl) n = n.parentNode;
+  return n && n !== bodyEl ? n : null;
+}
+
+/* ---------- turning typed markers into blocks ---------- */
+function setBlockType(el, type) {
+  if (!el) return;
+  if (!type || type === "p") { if (el.dataset) delete el.dataset.t; }
+  else el.dataset.t = type;
+  el.classList.add("ln");
+}
+function stripChars(el, n) {
+  let left = n;
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  for (const node of nodes) {
+    if (left <= 0) break;
+    const cut = Math.min(left, node.data.length);
+    node.data = node.data.slice(cut);
+    left -= cut;
+  }
+}
+function normalizeBlock(el) {
+  if (!el) return;
+  const t = blockType(el);
+  const text = el.textContent;
+  if (t === "code") {
+    /* a fence on its own line closes the code block */
+    if (text.trim() === "```") {
+      el.textContent = "";
+      setBlockType(el, "p");
+      const r = document.createRange();
+      r.selectNodeContents(el);
+      r.collapse(true);
+      setSelRange(r);
+    }
+    return;
+  }
+  if (t !== "p") return;
+  const off = caretOffset(el);
+  let m;
+  if (/^```$/.test(text.trim())) {
+    el.textContent = "";
+    setBlockType(el, "code");
+    const r = document.createRange();
+    r.selectNodeContents(el);
+    r.collapse(true);
+    setSelRange(r);
+    return;
+  }
+  if ((m = /^(#{1,3})\s/.exec(text))) {
+    stripChars(el, m[0].length);
+    setBlockType(el, "h" + m[1].length);
+  } else if ((m = /^[-*]\s/.exec(text))) {
+    stripChars(el, 2);
+    setBlockType(el, "ul");
+  } else if ((m = /^\d+[.)]\s/.exec(text))) {
+    stripChars(el, m[0].length);
+    setBlockType(el, "ol");
+  } else return;
+  if (off != null) setCaretOffset(el, Math.max(0, off - m[0].length));
+}
+
+/* ---------- links appear once you leave the block you typed them in ---------- */
+function linkifyBlock(el) {
+  if (!el || !el.isConnected || !bodyEl.contains(el)) return;
+  if (blockType(el) === "code") return;
+  const text = blockText(el);
+  const re = new RegExp(URL_RE.source, "gi");
+  if (!re.test(text)) return;
+  const off = caretOffset(el);
+  el.replaceChildren();
+  appendInline(el, text);
+  if (off != null) setCaretOffset(el, off);
+}
+
+/* ---------- one commit path ---------- */
+function commitEditor() {
+  const n = activeNote(); if (!n) return;
+  decorateBlocks();
+  n.body = serializeEditor();
+  syncImagesFromDom(n);
+  touch(n); scheduleSave(); scheduleList(); updateCounts(); syncFmt();
+}
+let editing = null;
+bodyEl.addEventListener("input", (e) => {
+  const here = blockOfCaret();
+  if (editing && editing !== here) linkifyBlock(editing);
+  editing = here;
+  if (e.inputType !== "historyUndo" && e.inputType !== "historyRedo") normalizeBlock(here);
+  commitEditor();
+});
+document.addEventListener("selectionchange", () => {
+  if (editing && !editing.contains(document.getSelection().anchorNode)) {
+    linkifyBlock(editing);
+    editing = null;
+  }
+  syncFmt();
+});
+
+/* ---------- the formatting row ---------- */
+function syncFmt() {
+  const b = blockOfCaret() || (document.querySelector(".editor-pane").contains(document.activeElement) ? blocksOf()[0] : null);
+  const t = b ? blockType(b) : null;
+  document.querySelectorAll("#editorTools .fmt-btn").forEach(btn => {
+    btn.classList.toggle("on", !!t && btn.dataset.fmt === t);
+  });
+}
+function blocksInSelection() {
+  const sel = window.getSelection();
+  const one = blockOfCaret();
+  if (!sel || !sel.rangeCount) return one ? [one] : [];
+  const r = sel.getRangeAt(0);
+  const hits = blocksOf().filter(el => r.intersectsNode(el));
+  return hits.length ? hits : (one ? [one] : []);
+}
+function formatSelection(type) {
+  const blocks = blocksInSelection();
+  if (!blocks.length) return;
+  const same = blocks.every(b => blockType(b) === type);
+  for (const b of blocks) setBlockType(b, same ? "p" : type);
+  commitEditor();
+  bodyEl.focus();
+  syncFmt();
+}
+document.getElementById("editorTools").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-fmt]");
+  if (btn) formatSelection(btn.dataset.fmt);
+});
+
+/* ---------- copy a code block ---------- */
+const codeCopy = document.getElementById("codeCopy");
+let copyRun = null;
+function codeRunOf(el) {
+  let first = el, last = el;
+  while (first.previousElementSibling && blockType(first.previousElementSibling) === "code") first = first.previousElementSibling;
+  while (last.nextElementSibling && blockType(last.nextElementSibling) === "code") last = last.nextElementSibling;
+  return { first, last };
+}
+function showCopy(el) {
+  const { first, last } = codeRunOf(el);
+  const pane = document.querySelector(".editor-pane").getBoundingClientRect();
+  const a = first.getBoundingClientRect(), b = last.getBoundingClientRect();
+  const lines = [];
+  for (let n = first; n; n = n.nextElementSibling) {
+    lines.push(n.textContent);
+    if (n === last) break;
+  }
+  copyRun = lines.join("\n");
+  codeCopy.style.top = Math.max(2, Math.round(a.top - pane.top + 5)) + "px";
+  codeCopy.style.left = Math.round(Math.min(b.right - pane.left - 66, pane.width - 78)) + "px";
+  codeCopy.classList.add("on");
+}
+function hideCopy() { codeCopy.classList.remove("on"); copyRun = null; }
+let hideTimer = null;
+const cancelHide = () => { clearTimeout(hideTimer); };
+const hideSoon = () => { clearTimeout(hideTimer); hideTimer = setTimeout(hideCopy, 180); };
+bodyEl.addEventListener("pointermove", (e) => {
+  const el = e.target.closest && e.target.closest('.ln[data-t="code"]');
+  if (el) { cancelHide(); showCopy(el); } else hideSoon();
+});
+bodyEl.addEventListener("pointerleave", hideSoon);
+bodyEl.addEventListener("scroll", hideCopy);
+/* the button floats outside the text, so walking onto it must not dismiss it */
+codeCopy.addEventListener("pointerenter", cancelHide);
+codeCopy.addEventListener("pointerleave", hideSoon);
+codeCopy.addEventListener("mousedown", (e) => e.preventDefault());
+codeCopy.addEventListener("click", () => {
+  if (!copyRun) return;
+  navigator.clipboard.writeText(copyRun).then(
+    () => toast("Code copied"),
+    () => toast("Couldn't copy")
+  );
+  hideCopy();
+});
+
+/* ---------- images still go in at the caret ---------- */
 function caretInEditor() {
   const sel = window.getSelection();
   return !!(sel && sel.rangeCount && bodyEl.contains(sel.getRangeAt(0).startContainer));
@@ -959,15 +1332,13 @@ function caretToEnd() {
   if (!sel) return;
   let target = bodyEl.lastElementChild;
   if (!target || (!target.textContent.trim() && !target.querySelector("img"))) {
-    target = document.createElement("div");
-    target.className = "ln";
+    target = makeBlock("p", "");
     bodyEl.appendChild(target);
   }
   const r = document.createRange();
   r.selectNodeContents(target);
   r.collapse(false);
-  sel.removeAllRanges();
-  sel.addRange(r);
+  setSelRange(r);
 }
 function insertImageAtCaret(id) {
   bodyEl.focus();
@@ -975,8 +1346,7 @@ function insertImageAtCaret(id) {
   const html = makeImgEl(id).outerHTML;
   let ok = false;
   try { ok = document.execCommand("insertHTML", false, html); } catch (_) { ok = false; }
-  let placed = !!bodyEl.querySelector('img[data-img="' + id + '"]');
-  if (!ok || !placed) {
+  if (!ok || !bodyEl.querySelector('img[data-img="' + id + '"]')) {
     const sel = window.getSelection();
     if (sel && sel.rangeCount) {
       const r = sel.getRangeAt(0);
@@ -993,12 +1363,13 @@ function insertImageAtCaret(id) {
     const r2 = document.createRange();
     r2.setStartAfter(im);
     r2.collapse(true);
-    sel2.removeAllRanges();
-    sel2.addRange(r2);
+    setSelRange(r2);
     /* nothing follows the picture on its line: keep typing below it, not beside it */
     const rest = im.nextSibling;
     const alone = !rest || (rest.nodeType === 3 && !rest.data.trim());
-    if (alone) { try { document.execCommand("insertParagraph"); } catch (_) {} }
+    if (alone && blockType(im.parentElement) === "p") {
+      try { document.execCommand("insertParagraph"); } catch (_) {}
+    }
   }
 }
 
@@ -1014,8 +1385,7 @@ async function attachToNote(file) {
   n.images.push({ id, src });
   if (activeId !== noteId) { scheduleSave(); renderList(); return; }   /* switched away meanwhile */
   insertImageAtCaret(id);
-  n.body = serializeEditor();
-  touch(n); scheduleSave(); scheduleList(); updateCounts();
+  commitEditor();
   toast("Image in place — click it to zoom, Backspace to remove");
 }
 
@@ -1095,6 +1465,34 @@ function adjacentImg(dir) {
   return null;
 }
 bodyEl.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    const b = blockOfCaret();
+    if (!b) return;
+    const t = blockType(b);
+    const empty = !b.textContent.trim() && !b.querySelector("img");
+    if (empty && (t === "ul" || t === "ol" || t === "code")) {
+      e.preventDefault();
+      setBlockType(b, "p");
+      commitEditor();
+      return;
+    }
+    e.preventDefault();
+    document.execCommand("insertParagraph");
+    const nb = blockOfCaret();
+    if (nb) setBlockType(nb, (t === "ul" || t === "ol" || t === "code") ? t : "p");
+    commitEditor();
+    return;
+  }
+  if (e.key === "Backspace") {
+    const b = blockOfCaret();
+    const t = b ? blockType(b) : "p";
+    if (b && t !== "p" && t !== "code" && caretOffset(b) === 0) {
+      e.preventDefault();                        /* step out of the block type first */
+      setBlockType(b, "p");
+      commitEditor();
+      return;
+    }
+  }
   if (e.key !== "Backspace" && e.key !== "Delete") return;
   const im = adjacentImg(e.key === "Backspace" ? "back" : "fwd");
   if (!im) return;

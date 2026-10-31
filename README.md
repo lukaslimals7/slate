@@ -13,6 +13,10 @@ storage, so it works offline and nothing leaves the device.
 - **Notes** — sidebar list, search, autosave, word count. Written in a quiet
   contenteditable page set in Lora; the text is still stored as the same plain,
   markdown-ish string.
+- **Formatting that gets out of the way** — headings, bullet and numbered lists, code
+  blocks with a copy button, and links that light up on their own. Type the markdown
+  (`# `, `- `, `1. `, `` ``` ``) or use the little row above the page; the syntax
+  never shows.
 - **Sketch pane** — draw beside the note, or switch to a full canvas when you need room.
   Six inks, adjustable brush, pressure-sensitive with a pen or tablet, eraser, undo/redo.
 - **Paste a screenshot, anywhere** — `⌘V` with an image on the clipboard. In the note it
@@ -27,6 +31,30 @@ storage, so it works offline and nothing leaves the device.
 - **Backup** — export everything as JSON, import it back. Also export a drawing as PNG.
 - **Light and dark** — follows your system, or pick one.
 - **Works offline** — it's one file. Save it, open it, done.
+
+## Formatting
+
+Type it, the way you would in any markdown file — the marker disappears and the line
+becomes that thing. The row above the page does the same job for a line you already
+wrote:
+
+| Type this | You get |
+|---|---|
+| `# ` | Heading |
+| `## ` | Subheading |
+| `### ` | Smaller heading again |
+| `- ` or `* ` | Bulleted list |
+| `1. ` | Numbered list |
+| `` ``` `` | Code block (ends with `` ``` `` on its own line) |
+| `https://…` or `www.…` | A link — highlighted when you leave the line, click to open |
+
+- **Enter** in a list or a code block continues it; **Enter** on an empty list item drops
+  back to a paragraph.
+- **Backspace** at the start of a formatted line turns it back into a paragraph first, so
+  you never eat the line above by accident.
+- **Hover a code block** for a Copy button — it copies the block without the fence.
+- **Paste** a markdown snippet and it lands formatted: headings, lists and fences are read
+  as you paste.
 
 ## Shortcuts
 
@@ -74,7 +102,7 @@ storage area — export your notes as JSON first, then import them on the new or
 ## How it's built
 
 One `index.html` — HTML, CSS, and vanilla JavaScript. No framework, no bundler, no
-dependencies, no fonts to install (Google Fonts, with system fallbacks). Total: ~54 KB.
+dependencies, no fonts to install (Google Fonts, with system fallbacks). Total: ~70 KB.
 
 **Strokes are stored as vectors, not pixels** — arrays of normalised points with pressure.
 That means a drawing stays sharp at any window size and re-renders perfectly after a
@@ -88,9 +116,11 @@ stay put when the pane resizes.
 
 **The note pane is a light rich editor, not a `<textarea>`.** That is the price of an image
 sitting in the text instead of in a corner: a plain textarea can only hold characters. The
-document is one block per line, and every change is serialized straight back to the same
-markdown-ish body — an image becomes `![image](slateimg:<id>)` at its exact position. Nothing
-else in the format moved, so search, share links, export and older notes all still read it.
+document is one block per line (with a `data-t` telling it heading, list, code or paragraph),
+and every change is serialized straight back to the same markdown-ish body — `# ` for a
+heading, `- ` for a bullet, fences around code, `![image](slateimg:<id>)` at its exact
+position. Nothing in the format moved, so search, share links, export and older notes all
+still read it, and the file you export is still readable as plain text.
 
 **Sharing uses the browser's own compression.** `CompressionStream('deflate-raw')` packs
 the note into base64url; the receiver's browser decompresses it. No library, no server,
