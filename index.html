@@ -2,9 +2,17 @@
 <html lang="en" data-theme="light">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Slate — notes &amp; sketches</title>
+<meta name="description" content="Notes and sketches in one quiet place. Works offline, lives on your device, nothing is uploaded.">
+<meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#f7f5f1">
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Slate">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231b1a17'/%3E%3Cpath d='M9 21c2-6 5-9 8-9s5 3 6 9' stroke='%23e8a33d' stroke-width='2.2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -28,19 +36,22 @@
     --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
   }
   *{box-sizing:border-box}
-  html,body{height:100%}
+  html,body{height:100%; overscroll-behavior:none}
   body{
     margin:0; background:var(--bg); color:var(--ink);
     font-family:var(--ui); font-size:14px;
     -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+    -webkit-text-size-adjust:100%; text-size-adjust:100%;
+    -webkit-tap-highlight-color:transparent;
     transition:background .25s ease, color .25s ease;
   }
-  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;touch-action:manipulation}
   input,textarea{font:inherit;color:inherit}
   ::selection{background:var(--accent-soft); color:var(--ink)}
   :focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:6px}
 
-  .app{display:grid; grid-template-columns:var(--side) 1fr; height:100dvh; overflow:hidden}
+  /* --app-h is set by script when the on-screen keyboard covers the page */
+  .app{display:grid; grid-template-columns:var(--side) 1fr; height:100vh; height:100dvh; height:var(--app-h, 100dvh); overflow:hidden}
 
   /* ---------- sidebar ---------- */
   .sidebar{
@@ -86,9 +97,24 @@
   .side-foot{display:flex; gap:6px; padding:10px 12px; border-top:1px solid var(--line)}
   .ghost{flex:1; padding:7px 8px; border-radius:7px; font-size:12px; color:var(--muted); border:1px solid transparent; transition:.12s}
   .ghost:hover{background:var(--hover); color:var(--ink)}
+  /* install card — only shown when the browser says it can be installed */
+  .install-btn{display:flex; align-items:center; gap:9px; width:100%; text-align:left; padding:11px 14px; border-top:1px solid var(--line); background:var(--accent-soft); color:var(--ink); font-size:13px; font-weight:500; transition:filter .12s}
+  .install-btn small{color:var(--muted); font-weight:400; margin-left:auto; font-size:11px; letter-spacing:.01em}
+  .install-btn:hover{filter:brightness(.97)}
+  .install-ico{display:grid; place-items:center; width:20px; height:20px; border-radius:6px; background:var(--ink); color:var(--bg); font-size:12px; flex:0 0 auto}
+  .install-btn[hidden], .install-hint[hidden], .net[hidden]{display:none}
+  .install-hint{display:grid; gap:3px; padding:12px 14px; border-top:1px solid var(--line); font-size:11.5px; line-height:1.5; color:var(--muted)}
+  .install-hint strong{color:var(--ink); font-size:12px; font-weight:600}
+  .install-hint em{font-style:normal; color:var(--ink)}
 
   /* ---------- main ---------- */
-  .main{display:grid; grid-template-columns:minmax(0, 1fr); grid-template-rows:var(--top) 1fr var(--status); min-width:0; min-height:0}
+  .main{
+    display:grid; grid-template-columns:minmax(0, 1fr); grid-template-rows:var(--top) 1fr var(--status);
+    min-width:0; min-height:0;
+    /* notch and home-indicator: zero everywhere except a cut-out phone */
+    padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom);
+    padding-left:env(safe-area-inset-left); padding-right:env(safe-area-inset-right);
+  }
   .topbar{display:flex; align-items:center; gap:10px; padding:0 14px 0 22px; border-bottom:1px solid var(--line); background:var(--panel)}
   .title{flex:1; min-width:0; border:0; background:transparent; outline:none; font-family:var(--serif); font-size:18px; font-weight:500; letter-spacing:-.01em; padding:6px 0}
   .title::placeholder{color:var(--faint)}
@@ -154,6 +180,8 @@
   /* the canvas takes focus on click so ⌘V can target it — never draw a ring for that */
   #canvas:focus, #canvas:focus-visible{outline:none}
   .tools{display:flex; align-items:center; gap:8px; padding:7px 10px; border-bottom:1px solid var(--line); background:var(--panel); flex-wrap:wrap}
+  /* grouped so a phone can lay the toolbar out in two tidy rows */
+  .tgroup{display:flex; align-items:center; gap:8px; min-width:0}
   .swatches{display:flex; gap:5px; align-items:center}
   .sw{width:17px; height:17px; border-radius:50%; border:2px solid transparent; box-shadow:inset 0 0 0 1px rgba(0,0,0,.12); transition:transform .1s}
   .sw:hover{transform:scale(1.12)}
@@ -178,6 +206,10 @@
   .dot{width:3px;height:3px;border-radius:50%;background:var(--faint)}
   .saved-flash{color:var(--accent)}
   .keys{color:var(--faint)}
+  .net{color:var(--accent); font-size:11px; white-space:nowrap}
+  /* keyboard open: the status bar would only steal room from the page */
+  html.kb-open{--status:0px}
+  html.kb-open .status{display:none}
 
   .toast{
     position:fixed; left:50%; bottom:26px; transform:translate(-50%, 14px);
@@ -198,21 +230,74 @@
   .app[data-mode="draw"] .workspace{grid-template-columns:1fr}
 
   @media (max-width: 940px){
+    :root{ --top:56px; --status:32px; }
     .app{grid-template-columns:1fr}
-    .sidebar{position:fixed; inset:0 auto 0 0; width:min(84vw, 300px); transform:translateX(-102%); transition:transform .22s ease; box-shadow:var(--shadow)}
+    .sidebar{
+      position:fixed; inset:0 auto 0 0; width:min(86vw, 320px);
+      transform:translateX(-102%); transition:transform .22s ease; box-shadow:var(--shadow);
+      padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom);
+      padding-left:env(safe-area-inset-left);
+    }
     .sidebar.open{transform:none}
+    .notes{overscroll-behavior:contain; -webkit-overflow-scrolling:touch}
     .only-mobile{display:grid}
-    .topbar{padding-left:10px}
-    .title{font-size:16.5px}
-    .seg button{padding:4px 8px}
+    .topbar{padding:0 6px 0 4px; gap:2px}
+    .title{font-size:16.5px; padding:4px 0}
+    .top-actions{gap:2px}
+    .icon-btn{width:38px; height:38px; font-size:16px}
     .keys{display:none}
-    .seg button[data-mode="split"]{display:none}
+    /* ⌘ hints mean nothing to a thumb */
+    .search kbd, .new-btn kbd{display:none}
+    .search input{padding-right:11px}
+    /* one toggle instead of three view buttons: phones only ever need write or draw */
+    .seg{display:none}
     .app[data-mode="split"] .workspace{grid-template-columns:1fr}
     .app[data-mode="split"] .canvas-pane{display:none}
     .app[data-mode="split"] .editor-pane{border-right:0}
-    .app[data-mode="write"] #body{padding:24px 20px 60px}
-    .app[data-mode="write"] .empty-hint{top:24px; left:20px}
-    .status{padding:0 12px}
+    .editor-tools{padding:3px 6px; gap:2px; flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none}
+    .editor-tools::-webkit-scrollbar{display:none}
+    .editor-tools .fmt-btn{height:34px; min-width:34px; padding:0 9px; font-size:12px; flex:0 0 auto}
+    #body{
+      padding:20px 18px 110px; font-size:17px; line-height:1.68;
+      -webkit-overflow-scrolling:touch; overscroll-behavior-y:contain;
+    }
+    .app[data-mode="write"] #body{padding:20px 18px 110px}
+    .empty-hint{top:22px; left:18px; font-size:17px}
+    .app[data-mode="write"] .empty-hint{top:22px; left:18px}
+    #body .note-img{max-height:46vh}
+    /* draw toolbar: ink on one row, actions on the next — nothing falls off the edge.
+       Scoped to #tools: the editor's formatting row is a .tools too. */
+    #tools{
+      display:grid; grid-template-columns:minmax(0,1fr) auto; grid-template-areas:"ink ink" "mode hist";
+      gap:2px 6px; padding:5px 8px 4px; flex-wrap:nowrap;
+    }
+    .tgroup-ink{grid-area:ink}
+    .tgroup-mode{grid-area:mode}
+    .tgroup-hist{grid-area:hist; justify-content:flex-end}
+    #tools .divider{display:none}
+    #tools .icon-btn{width:40px; height:40px; font-size:17px}
+    .swatches{gap:9px; flex:1; min-width:0}
+    .sw{width:25px; height:25px; flex:0 0 auto}
+    .sw.on{box-shadow:0 0 0 2px var(--ink)}
+    #tools input[type=range]{flex:1; width:auto; min-width:52px; height:34px; margin:0}
+    .canvas-hint{font-size:11.5px; bottom:8px; padding:0 10px}
+    .paste-chip{top:6px; left:6px}
+    .status{padding:0 12px; font-size:11px}
+    .note-item{padding:12px 10px 11px}
+    .side-foot{padding:8px 10px; gap:8px}
+    .ghost{padding:11px 8px; font-size:12.5px}
+    .search{margin:0 12px 8px}
+    /* 16px inputs stop iOS from zooming the page in when one is focused */
+    .search input{font-size:16px}
+    .toast{bottom:calc(16px + env(safe-area-inset-bottom)); font-size:13px; max-width:calc(100vw - 32px)}
+    .lightbox{padding:2vh 3vw}
+    .lightbox img{max-height:88vh}
+  }
+  /* fingers are bigger than cursors */
+  @media (pointer: coarse){
+    .note-item:hover{background:none}
+    .note-item.active:hover{background:var(--active)}
+    .code-copy{font-size:12px; padding:5px 10px}
   }
   @media (prefers-reduced-motion: reduce){ *{transition:none !important} }
 </style>
@@ -236,6 +321,15 @@
       <button class="ghost" id="exportAllBtn">Export all</button>
       <input type="file" id="fileInput" accept="application/json,.json" hidden>
     </div>
+    <button class="install-btn" id="installBtn" hidden>
+      <span class="install-ico">⤓</span>
+      <span>Install Slate</span>
+      <small>opens as its own app</small>
+    </button>
+    <div class="install-hint" id="installHint" hidden>
+      <strong>Add to your home screen</strong>
+      <span>Tap the share button, then <em>Add to Home Screen</em>. Slate then opens full screen, offline.</span>
+    </div>
   </aside>
   <div class="backdrop" id="backdrop"></div>
 
@@ -244,6 +338,7 @@
       <button class="icon-btn only-mobile" id="menuBtn" aria-label="Notes">☰</button>
       <input id="title" class="title" placeholder="Untitled" spellcheck="false" autocomplete="off">
       <div class="top-actions">
+        <button class="icon-btn only-mobile" id="modeToggle" title="Draw" aria-label="Draw">✎</button>
         <div class="seg" id="modeSeg" role="group" aria-label="View">
           <button data-mode="write">Write</button>
           <button data-mode="split">Split</button>
@@ -274,15 +369,21 @@
       </div>
       <div class="pane canvas-pane">
         <div class="tools" id="tools">
-          <div class="swatches" id="swatches"></div>
-          <input type="range" id="size" min="0.8" max="16" step="0.2" value="2.4" title="Brush size">
-          <span class="divider"></span>
-          <button class="icon-btn" id="penBtn" aria-pressed="true" title="Pen">✎</button>
-          <button class="icon-btn" id="eraserBtn" aria-pressed="false" title="Eraser">⌫</button>
-          <span class="divider"></span>
-          <button class="icon-btn" id="undoBtn" title="Undo">↶</button>
-          <button class="icon-btn" id="redoBtn" title="Redo">↷</button>
-          <button class="icon-btn" id="pngBtn" title="Save drawing as PNG">⤓</button>
+          <div class="tgroup tgroup-ink">
+            <div class="swatches" id="swatches"></div>
+            <input type="range" id="size" min="0.8" max="16" step="0.2" value="2.4" title="Brush size">
+          </div>
+          <div class="tgroup tgroup-mode">
+            <span class="divider"></span>
+            <button class="icon-btn" id="penBtn" aria-pressed="true" title="Pen">✎</button>
+            <button class="icon-btn" id="eraserBtn" aria-pressed="false" title="Eraser">⌫</button>
+          </div>
+          <div class="tgroup tgroup-hist">
+            <span class="divider"></span>
+            <button class="icon-btn" id="undoBtn" title="Undo">↶</button>
+            <button class="icon-btn" id="redoBtn" title="Redo">↷</button>
+            <button class="icon-btn" id="pngBtn" title="Save drawing as PNG">⤓</button>
+          </div>
         </div>
         <div class="canvas-wrap">
           <canvas id="canvas" tabindex="0"></canvas>
@@ -302,6 +403,7 @@
       <span class="dot"></span>
       <span id="saved">Saved</span>
       <span class="grow"></span>
+      <span id="net" class="net" hidden>Offline</span>
       <span class="keys">⌘N new · ⌘K search · ⌘S save</span>
     </footer>
   </main>
@@ -1307,6 +1409,14 @@ bodyEl.addEventListener("pointermove", (e) => {
   const el = e.target.closest && e.target.closest('.ln[data-t="code"]');
   if (el) { cancelHide(); showCopy(el); } else hideSoon();
 });
+/* a tap has no hover of its own: show the button once the caret scroll settles */
+bodyEl.addEventListener("pointerup", (e) => {
+  const el = e.target.closest && e.target.closest('.ln[data-t="code"]');
+  if (!el) return;
+  setTimeout(() => {
+    if (el.isConnected) { cancelHide(); showCopy(el); }
+  }, 220);
+});
 bodyEl.addEventListener("pointerleave", hideSoon);
 bodyEl.addEventListener("scroll", hideCopy);
 /* the button floats outside the text, so walking onto it must not dismiss it */
@@ -1544,6 +1654,7 @@ function newNote() {
   titleEl.value = ""; renderEditor("");
   undoStack = []; redoStack = [];
   renderList(); fitCanvas(); syncTools(); updateCounts(); renderPasteChip();
+  closeDrawer();
   titleEl.focus();
   scheduleSave();
   toast("New note");
@@ -1691,6 +1802,39 @@ async function importFromHash() {
   }
 }
 
+/* ---------- phones: keep the app inside what you can actually see ---------- */
+const rootEl = document.documentElement;
+let vvFrame = 0;
+function syncViewport() {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  const h = Math.round(vv.height);
+  /* iOS leaves the layout viewport at full height when the keyboard opens and
+     shrinks only the visual one — mirror it, or the caret hides behind the keys */
+  const keyboard = h > 0 && h < window.innerHeight - 120;
+  rootEl.classList.toggle("kb-open", keyboard);
+  if (keyboard) rootEl.style.setProperty("--app-h", h + "px");
+  else rootEl.style.removeProperty("--app-h");
+}
+if (window.visualViewport) {
+  const onViewportChange = () => { cancelAnimationFrame(vvFrame); vvFrame = requestAnimationFrame(syncViewport); };
+  window.visualViewport.addEventListener("resize", onViewportChange);
+  window.visualViewport.addEventListener("scroll", onViewportChange);
+  syncViewport();
+}
+window.addEventListener("orientationchange", () => setTimeout(() => { syncViewport(); fitCanvas(); }, 220));
+
+/* the canvas hint should speak the language of the device you are on */
+const coarsePtr = window.matchMedia ? window.matchMedia("(pointer: coarse)") : null;
+function syncHintText() {
+  const touch = !!(coarsePtr && coarsePtr.matches);
+  hintEl.textContent = touch
+    ? "Draw with a finger or a stylus"
+    : "Draw with a mouse, finger, or pen · ⌘V pastes an image";
+}
+if (coarsePtr && coarsePtr.addEventListener) coarsePtr.addEventListener("change", syncHintText);
+syncHintText();
+
 /* ---------- theme / mode / drawer ---------- */
 function applyTheme(t) {
   document.documentElement.setAttribute("data-theme", t);
@@ -1706,9 +1850,20 @@ function applyMode(m) {
   const effective = (m === "split" && window.innerWidth <= 940) ? "write" : m;
   app.setAttribute("data-mode", effective);
   document.querySelectorAll("#modeSeg button").forEach(b => b.classList.toggle("on", b.dataset.mode === effective));
+  const tg = $("modeToggle");
+  if (tg) {
+    const drawing = effective === "draw";
+    tg.textContent = drawing ? "¶" : "✎";
+    tg.title = drawing ? "Back to writing" : "Draw";
+    tg.setAttribute("aria-label", tg.title);
+  }
   localStorage.setItem(LS_MODE, m);
   requestAnimationFrame(fitCanvas);
 }
+/* phones get one button instead of Write/Split/Draw */
+$("modeToggle").addEventListener("click", () => {
+  applyMode(app.getAttribute("data-mode") === "draw" ? "write" : "draw");
+});
 $("modeSeg").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-mode]");
   if (b) applyMode(b.dataset.mode);
@@ -1746,6 +1901,78 @@ function toast(msg) {
   toastTimer = setTimeout(() => toastEl.classList.remove("show"), 2400);
 }
 
+/* ---------- install, offline, service worker ---------- */
+const isStandalone = () =>
+  (window.matchMedia && matchMedia("(display-mode: standalone)").matches) ||
+  (window.matchMedia && matchMedia("(display-mode: fullscreen)").matches) ||
+  window.navigator.standalone === true;
+
+let installEvent = null;
+const installBtn = $("installBtn"), installHint = $("installHint");
+
+function refreshInstallUI() {
+  const already = isStandalone();
+  installBtn.hidden = already || !installEvent;
+  /* Safari never fires beforeinstallprompt, so offer the manual route there */
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+              (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  installHint.hidden = already || !!installEvent || !ios;
+}
+
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  installEvent = e;
+  refreshInstallUI();
+});
+window.addEventListener("appinstalled", () => {
+  installEvent = null;
+  refreshInstallUI();
+  toast("Installed — Slate is on your home screen");
+});
+installBtn.addEventListener("click", async () => {
+  if (!installEvent) return;
+  try {
+    installEvent.prompt();
+    await installEvent.userChoice;
+  } catch (_) {}
+  installEvent = null;
+  refreshInstallUI();
+});
+
+function syncNet() {
+  const n = $("net");
+  if (n) n.hidden = navigator.onLine !== false;
+}
+window.addEventListener("online", syncNet);
+window.addEventListener("offline", syncNet);
+syncNet();
+
+if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) {
+  let hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    /* only nag when an update replaced a version this page already ran */
+    if (hadController) toast("Updated in the background — reopen Slate to see it");
+    hadController = true;
+  });
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js", { scope: "./" }).catch(() => {});
+  });
+}
+
+/* site data can be evicted when the device runs low — ask to be kept */
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+
+/* launcher shortcuts from the installed app: ?action=new|draw|search */
+function handleLaunchAction() {
+  let params;
+  try { params = new URLSearchParams(location.search); } catch (_) { return; }
+  const act = params.get("action");
+  if (act === "new") newNote();
+  else if (act === "draw") applyMode("draw");
+  else if (act === "search") { openDrawer(); setTimeout(() => searchEl.focus(), 80); }
+  if (act || params.has("source")) history.replaceState(null, "", location.pathname + location.hash);
+}
+
 /* ---------- boot ---------- */
 load();
 applyTheme(localStorage.getItem(LS_THEME) || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
@@ -1757,7 +1984,11 @@ renderList();
 updateCounts();
 renderPasteChip();
 requestAnimationFrame(() => { fitCanvas(); syncTools(); });
-importFromHash().finally(() => { renderList(); renderPasteChip(); fitCanvas(); });
+importFromHash().finally(() => {
+  renderList(); renderPasteChip(); fitCanvas();
+  handleLaunchAction();
+  refreshInstallUI();
+});
 window.addEventListener("beforeunload", saveNow);
 document.addEventListener("visibilitychange", () => { if (document.hidden) saveNow(); });
 })();

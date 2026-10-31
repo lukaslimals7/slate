@@ -30,7 +30,11 @@ storage, so it works offline and nothing leaves the device.
   won't fit in a URL — use Export all for those.
 - **Backup** — export everything as JSON, import it back. Also export a drawing as PNG.
 - **Light and dark** — follows your system, or pick one.
-- **Works offline** — it's one file. Save it, open it, done.
+- **Works offline** — the service worker keeps the app cached, so it opens with no network
+  at all. The notes never needed one.
+- **Installs like an app** — on a phone (or Chrome on the desktop) it gets a home-screen
+  icon, opens full screen with no browser chrome, and offers *New note / Draw / Search* as
+  long-press shortcuts.
 
 ## Formatting
 
@@ -79,7 +83,7 @@ Or serve it: `python3 -m http.server 8089` → http://127.0.0.1:8089
 
 ### Hosting it
 
-It's a static file, so anywhere that serves HTML works — no build, no runtime:
+It's a folder of static files, so anywhere that serves HTML works — no build, no runtime:
 
 - **Locally** — keep the file on your machine and open it. Works offline forever.
 - **Vercel / Netlify / Cloudflare Pages** — drag the folder in, or connect the repo.
@@ -99,10 +103,36 @@ Because notes live in `localStorage`, the *same* note list is only visible on th
 browser and origin where it was written. Moving from `file://` to `https://…` is a new
 storage area — export your notes as JSON first, then import them on the new origin.
 
+## On your phone
+
+![Slate on a phone, drawing pane](preview/coffee-mobile.png)
+
+The same page is one screen on a phone: the notes move into a drawer, the top bar carries a
+single draw/write switch, and the drawing tools fold into two rows instead of running off the
+edge. *Split* is not offered below 940 px — it needs the width.
+
+Installing needs the page served over `https://` (or `localhost`); browsers refuse to install
+from a `file://` page, and the offline cache needs a secure origin too.
+
+- **Android / Chrome** — open the site, ⋮ menu → *Install app*, or tap the **Install Slate**
+  card at the bottom of the notes drawer.
+- **iPhone / Safari** — open the site, tap Share, then *Add to Home Screen*. iOS never shows
+  an install prompt, so the drawer shows that instruction instead.
+
+Installed, it opens full screen, works with no signal, and its launcher shortcuts open a
+blank note, the canvas or search directly.
+
+Two things worth knowing: the on-screen keyboard no longer covers the line you are typing
+(the app follows the visible area rather than the layout viewport), and notes stay
+per-device — the phone starts with its own list, so export from the laptop and import on the
+phone to move work across.
+
 ## How it's built
 
-One `index.html` — HTML, CSS, and vanilla JavaScript. No framework, no bundler, no
-dependencies, no fonts to install (Google Fonts, with system fallbacks). Total: ~70 KB.
+`index.html` holds the whole app — HTML, CSS, vanilla JavaScript. No framework, no bundler,
+no dependencies, no fonts to install (Google Fonts, with system fallbacks). Around it sit the
+pieces a browser needs to install it: `manifest.webmanifest`, `sw.js` (the offline cache) and
+`icons/`. Total: ~75 KB plus icons.
 
 **Strokes are stored as vectors, not pixels** — arrays of normalised points with pressure.
 That means a drawing stays sharp at any window size and re-renders perfectly after a
