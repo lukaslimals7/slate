@@ -1111,6 +1111,12 @@ function renderEditor(text) {
   }
   if (inCode) closeCode();
   if (!frag.childNodes.length) frag.appendChild(makeBlock("p", ""));
+  /* always keep a paragraph before the first rich block so the caret
+     can be placed above it */
+  const first = frag.firstElementChild;
+  if (first && blockType(first) !== "p") {
+    frag.insertBefore(makeBlock("p", ""), first);
+  }
   bodyEl.replaceChildren(frag);
   decorateBlocks();
 }
@@ -1377,7 +1383,15 @@ function formatSelection(type) {
   const blocks = blocksInSelection();
   if (!blocks.length) return;
   const same = blocks.every(b => blockType(b) === type);
+  const first = blocksOf()[0];
+  const firstWasP = first && blockType(first) === "p";
   for (const b of blocks) setBlockType(b, same ? "p" : type);
+  /* when the first block becomes a rich block, put an empty paragraph
+     above it so the caret can be placed there */
+  if (!same && first && blockType(first) !== "p" && firstWasP) {
+    const empty = makeBlock("p", "");
+    first.before(empty);
+  }
   commitEditor();
   bodyEl.focus();
   syncFmt();
