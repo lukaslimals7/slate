@@ -1339,6 +1339,15 @@ bodyEl.addEventListener("input", (e) => {
   editing = here;
   if (e.inputType !== "historyUndo" && e.inputType !== "historyRedo") normalizeBlock(here);
   commitEditor();
+  /* native contenteditable undo/redo reverts text but not data-t block types,
+     so an empty heading / list / code block can be left behind. Collapse it. */
+  if ((e.inputType === "historyUndo" || e.inputType === "historyRedo") && here) {
+    const t = blockType(here);
+    if (t !== "p" && !here.textContent.trim() && !here.querySelector("img")) {
+      setBlockType(here, "p");
+      commitEditor();
+    }
+  }
 });
 document.addEventListener("selectionchange", () => {
   if (editing && !editing.contains(document.getSelection().anchorNode)) {
