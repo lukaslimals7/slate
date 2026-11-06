@@ -404,7 +404,7 @@
       <span id="saved">Saved</span>
       <span class="grow"></span>
       <span id="net" class="net" hidden>Offline</span>
-      <span class="keys">⌘N new · ⌘K search · ⌘S save</span>
+      <span class="keys">⌘N new · ⌘K search · ⌘S save · ⌘1-3 heading · ⌘` code · ⌘⇧8 bullets</span>
     </footer>
   </main>
 </div>
@@ -1575,6 +1575,23 @@ function adjacentImg(dir) {
   return null;
 }
 bodyEl.addEventListener("keydown", (e) => {
+  const mod = e.metaKey || e.ctrlKey;
+  if (mod) {
+    const code = e.code;
+    let type = null;
+    if (code === "Digit1") type = "h1";
+    else if (code === "Digit2") type = "h2";
+    else if (code === "Digit3") type = "h3";
+    else if (code === "Backquote") type = "code";
+    else if (e.shiftKey && code === "Digit8") type = "ul";
+    else if (e.shiftKey && code === "Digit7") type = "ol";
+    if (type) {
+      e.preventDefault();
+      formatSelection(type);
+      toast(type.toUpperCase() + " block");
+      return;
+    }
+  }
   if (e.key === "Enter" && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
     const b = blockOfCaret();
     if (!b) return;
